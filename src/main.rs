@@ -64,11 +64,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     //Storing file path
-    let emp_data_file_path = matches.get_one::<String>("emp_data").unwrap();
-    let dept_data_file_path = matches.get_one::<String>("dept_data").unwrap();
-    let salary_data_file_path = matches.get_one::<String>("salary_data").unwrap();
-    let leave_data_file_path = matches.get_one::<String>("leave_data").unwrap();
-    let output_file_path = matches.get_one::<String>("output_file").unwrap();
+    let default_emp_data_path = "default_emp_data_path".to_string();
+    let default_dept_data_path = "default_dept_data_path".to_string();
+    let default_salary_data_path = "default_salary_data_path".to_string();
+    let default_leave_data_path = "default_leave_data_path".to_string();
+    let default_output_path = "default_output_file_path".to_string();
+    let emp_data_file_path = matches.get_one::<String>("emp_data").unwrap_or(&default_emp_data_path);
+    let dept_data_file_path = matches.get_one::<String>("dept_data").unwrap_or(&default_dept_data_path);
+    let salary_data_file_path = matches.get_one::<String>("salary_data").unwrap_or(&default_salary_data_path);
+    let leave_data_file_path = matches.get_one::<String>("leave_data").unwrap_or(&default_leave_data_path);
+    let output_file_path = matches.get_one::<String>("output_file").unwrap_or(&default_output_path);
+
     // Parsing files
     let employees = parse_employee_data(emp_data_file_path).expect("Parsing error");
     let departments = parse_department_data(dept_data_file_path).expect("Parsing error");
@@ -88,12 +94,12 @@ fn parse_employee_data(file_path: &str) -> Result<Vec<Employee>, Box<dyn Error>>
     lines.next(); // Skip header
     let mut employees = Vec::new();
     for line in lines {
-        let line = line.unwrap();
+        let line = line.expect("Line was not loaded");
         let fields: Vec<&str> = line.split('|').collect();
         let employee = Employee {
-            emp_id: fields[0].parse().unwrap(),
+            emp_id: fields[0].parse().unwrap_or(-1),
             emp_name: fields[1].to_string(),
-            dept_id: fields[2].parse().unwrap(),
+            dept_id: fields[2].parse().unwrap_or(-1),
             mobile_no: fields[3].to_string(),
             email: fields[4].to_string(),
         };
@@ -110,8 +116,8 @@ fn parse_department_data(file_path: &str) -> Result<HashMap<i32, Department>, Bo
 
     for row in sheet.rows().skip(1) {
         let department = Department {
-            dept_id: row[0].get_float().unwrap() as i32,
-            dept_title: row[1].get_string().unwrap().to_string(),
+            dept_id: row[0].get_float().unwrap_or(-1.1) as i32,
+            dept_title: row[1].get_string().unwrap_or("no string found").to_string(),
         };
         departments.insert(department.dept_id, department);
     }
@@ -125,15 +131,15 @@ fn parse_salary_data(file_path: &str) -> Result<HashMap<i32, String>, Box<dyn Er
     let mut salaries = HashMap::new();
     let current_month = Utc::now().month();
     for row in sheet.rows().skip(1) {
-        let emp_id = row[0].get_float().unwrap() as i32;
-        let salary_date = row[2].get_string().unwrap().to_string();
+        let emp_id = row[0].get_float().unwrap_or(-1.1) as i32;
+        let salary_date = row[2].get_string().unwrap_or("default date").to_string();
         let formatted_date=format!("01 {}",salary_date);
 
         let parsed_date = NaiveDate::parse_from_str(&formatted_date, "%d %b %Y").expect("error in parsing formatted date");
         let salary_month = parsed_date.month();
     
         if salary_month == current_month {
-            salaries.insert(emp_id, row[4].get_string().unwrap().to_string());
+            salaries.insert(emp_id, row[4].get_string().unwrap_or("default date").to_string());
         }
     }
 
@@ -147,9 +153,9 @@ fn parse_leave_data(file_path: &str) -> Result<HashMap<i32, i32>, Box<dyn Error>
     let current_month = Utc::now().month();
 
     for row in sheet.rows().skip(1) {
-        let emp_id = row[0].get_float().unwrap() as i32;
-        let leave_from = NaiveDate::parse_from_str(row[2].get_string().unwrap(), "%d-%m-%Y").expect("error in parsing from date");
-        let leave_to = NaiveDate::parse_from_str(row[3].get_string().unwrap(), "%d-%m-%Y").expect("error in parsing to date");
+        let emp_id = row[0].get_float().unwrap_or(-1.1) as i32;
+        let leave_from = NaiveDate::parse_from_str(row[2].get_string().expect("error in parsing from date"), "%d-%m-%Y").expect("error in parsing from date");
+        let leave_to = NaiveDate::parse_from_str(row[3].get_string().expect("error in parsing from date"), "%d-%m-%Y").expect("error in parsing to date");
         if leave_from.month()==current_month && leave_to.month()==current_month{
             let days = (leave_to - leave_from).num_days() as i32 + 1;
             *leaves.entry(emp_id).or_insert(0) += days;
@@ -195,7 +201,7 @@ fn generate_output(
     leaves: HashMap<i32, i32>,
     output_file_path: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut writer = BufWriter::new(File::create(output_file_path).unwrap());
+    let mut writer = BufWriter::new(File::create(output_file_path).expect("Output file path not resolved"));
 
     //header
     writeln!(
